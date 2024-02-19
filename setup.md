@@ -7,4 +7,5 @@ pip install omegaconf==1.4.0
 pip install tqdm
 pip install tensorboardX
 pip install pandas
+pip install soundfile-0.12.1
 ```

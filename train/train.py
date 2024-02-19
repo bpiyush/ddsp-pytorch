@@ -17,6 +17,8 @@ from network.autoencoder.autoencoder import AutoEncoder
 from loss.mss_loss import MSSLoss
 from optimizer.radam import RAdam
 
+import warnings; warnings.filterwarnings("ignore")
+
 """
 "setup" allows you to OVERRIDE the config through command line interface
 - for example
