@@ -290,8 +290,16 @@ class Trainer:
 
             print_row(kwarg_list=print_kwarg, pad=" ")
             print_row(kwarg_list=[""] * len(kwarg_list), pad="-")
+
+            """
+            # Had to change this to accomodate the new pandas version
             self.dataframe = self.dataframe.append(
                 dict(zip(kwarg_list, print_kwarg)), ignore_index=True
+            )
+            """
+            self.dataframe = pd.concat(
+                [self.dataframe, pd.DataFrame([print_kwarg], columns=kwarg_list)],
+                ignore_index=True,
             )
 
             if is_best:

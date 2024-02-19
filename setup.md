@@ -9,3 +9,8 @@ pip install tensorboardX
 pip install pandas
 pip install soundfile-0.12.1
 ```
+
+
+## TODO
+
+1. Replace `f0` in training with physically computed values.
