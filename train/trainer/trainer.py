@@ -419,7 +419,11 @@ class Trainer:
             df_ex = pd.read_csv(Trainer.experiment_name + ".csv", index_col=0)
             if self.config["experiment_id"] in df_ex.index:
                 df_ex = df_ex.drop(self.config["experiment_id"])
+            
+            """
             df_ex = df_ex.append(df_config, sort=False)
+            """
+            df_ex = pd.concat([df_ex, df_config], sort=False)
         else:
             df_ex = df_config
         df_ex.to_csv(Trainer.experiment_name + ".csv")
