@@ -9,6 +9,7 @@ pip install tensorboardX
 pip install pandas
 pip install soundfile==0.12.1
 pip install ipdb hmmlearn==0.2.3
+ pip install librosa matplotlib
 ```
 
 
