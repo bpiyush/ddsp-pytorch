@@ -160,7 +160,8 @@ def waveform_to_logmelspec(y, sr, n_fft, hop_length, n_mels, fmin=0, fmax=8000):
     y = y.cpu().numpy()
     
     S = librosa.feature.melspectrogram(
-        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax, fmin=fmin
+        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
+        n_mels=n_mels, fmax=fmax, fmin=fmin,
     )
     S = librosa.power_to_db(S, ref=np.max)
 
@@ -189,12 +190,6 @@ def compute_fundamental_frequencies(duration, height, radius, b=0.01, num_evals=
     """Computes the F0 given duration and container parameters."""
 
     # Sample timestamps T
-    # num_frames = librosa.time_to_frames(
-    #     [duration],
-    #     sr=sr,
-    #     hop_length=stft["hop_length"],
-    #     n_fft=stft["n_fft"],
-    # )[0]
     T = np.linspace(0, duration, num_evals)
 
     # Compute length of air column
@@ -285,10 +280,24 @@ def show_true_example(
         plt.savefig(save_path)
 
 
-def show_result(y, S, sr, stft, r_true, h_true, duration_true, y_gen, r_gen, h_gen, duration_gen, show=False):
+def show_result(
+        y,
+        S,
+        sr,
+        stft,
+        r_true,
+        h_true,
+        duration_true,
+        y_gen,
+        r_gen,
+        h_gen,
+        duration_gen,
+        first_frame,
+        show=False,
+    ):
 
     # Show original example
-    su.log.print_update("Showing original example ", pos="left", color="blue")
+    # su.log.print_update("Showing original example ", pos="left", color="blue")
 
     show_true_example(
         first_frame,
@@ -309,7 +318,7 @@ def show_result(y, S, sr, stft, r_true, h_true, duration_true, y_gen, r_gen, h_g
         display(Markdown('---'))
 
     # Show generated example
-    su.log.print_update("Showing generated example ", pos="left", color="blue")
+    # su.log.print_update("Showing generated example ", pos="left", color="blue")
     empty_image = PIL.Image.new('RGB', first_frame.size)
 
     S_gen = waveform_to_logmelspec(y=y_gen.detach(), sr=sr, **stft)
@@ -327,6 +336,80 @@ def show_result(y, S, sr, stft, r_true, h_true, duration_true, y_gen, r_gen, h_g
         su.visualize.show_single_audio(
             data=y_gen.detach().cpu().numpy()[0], rate=sr,
         )
+
+
+def generate_sample(
+        y,
+        net,
+        sr,
+        stft,
+        measurements_gen,
+        duration_gen,
+        S=None,
+        first_frame=None,
+        show=False,
+        increase_volume=True,
+    ):
+    device = next(net.parameters()).device
+
+    # Get loudness from a real audio
+    with torch.no_grad():
+        loudness = net.encoder.loudness_extractor(
+            {"audio": y.to(device)},
+        )
+    num_frames = loudness.shape[1]
+
+    # NOTE: duration_gen is not actually used because 
+    # the model implicitly uses the duration of the input audio
+
+    # Compute dynamics of pouring water in this container
+    T, L, F0, duration, physical_params = compute_dynamics(
+        measurements_gen, duration_gen, num_evals=num_frames,
+    )
+
+    # Generate synthetic audio
+    batch = {
+        "f0": torch.from_numpy(F0).to(loudness.device).float().unsqueeze(0),
+        "loudness": loudness,
+    }
+    with torch.no_grad():
+        latent = net.decoder(batch)
+        harmonic = net.harmonic_oscillator(latent)
+        noise = net.filtered_noise(latent)
+        audio_synth = harmonic + noise[:, : harmonic.shape[-1]]
+        audio = dict(
+            harmonic=harmonic, noise=noise, audio_synth=audio_synth,
+        )
+        audio["audio_reverb"] = net.reverb(audio)
+        audio["a"] = latent["a"]
+        audio["c"] = latent["c"]
+    y_generated_dereverb = audio["audio_synth"].cpu()
+    y_generated_reverb = audio["audio_reverb"].cpu()
+    y_gen = y_generated_dereverb
+
+    if increase_volume:
+        # Increase volume
+        global_max = np.random.uniform(0.05, 0.3)
+        y_gen = y_gen * global_max / y_gen.abs().max()
+
+    # Show the results
+    if show:
+        show_result(
+            y,
+            S,
+            sr,
+            stft,
+            r_true,
+            h_true,
+            duration_true,
+            y_gen,
+            r_gen,
+            h_gen,
+            duration_gen,
+            first_frame,
+        )
+    
+    return y_gen
 
 
 if __name__ == "__main__":
@@ -366,76 +449,72 @@ if __name__ == "__main__":
     num_freqs = len(frequencies)
 
 
+    num_samples = 5000
 
-    i = np.random.choice(len(df))
-    print("Index: ", i)
-    row = df.iloc[i].to_dict()
+    save_dir = "/scratch/shared/beegfs/piyush/datasets/SyntheticPouring/v2.0"
+    iterator = su.log.tqdm_iterator(range(num_samples), desc="Generaing samples")
+    for j in iterator:
 
-    audio_path = row["audio_clip_path"]
+        # Sample a random row of real audio
+        i = np.random.choice(len(df))
+        row = df.iloc[i].to_dict()
+        audio_path = row["audio_clip_path"]
 
-    # Load audio
-    y = load_audio(audio_path, config.sample_rate)
+        # Load audio
+        y = load_audio(audio_path, config.sample_rate)
 
-    # Get logmelspectrogram
-    S = waveform_to_logmelspec(y=y, sr=sr, **stft)
+        """
+        # Get logmelspectrogram
+        S = waveform_to_logmelspec(y=y, sr=sr, **stft)
 
-    # Get first frame (to show container)
-    first_frame = PIL.Image.open(row["first_frame_path"])
+        # Get first frame (to show container)
+        first_frame = PIL.Image.open(row["first_frame_path"])
+        """
 
-    # Get measurements & duration
-    m = row["measurements"]
-    h_true = m["net_height"]
-    r_true = 0.25 * (m["diameter_bottom"] + m["diameter_top"])
-    duration_true = row["end_time"] - row["start_time"]
+        # Get measurements & duration
+        m = row["measurements"]
+        h_true = m["net_height"]
+        r_true = 0.25 * (m["diameter_bottom"] + m["diameter_top"])
+        duration_true = row["end_time"] - row["start_time"]
 
-    # Get loudness from a real audio
-    with torch.no_grad():
-        loudness = net.encoder.loudness_extractor(
-            {"audio": y.to(device)},
+        # Select a container with random measurements
+        r_gen = np.random.uniform(*radius_range)
+        h_gen = np.random.uniform(*height_range)
+        duration_gen = np.random.uniform(*duration_range)
+
+        # Define measurements of the synthetic container
+        measurements_gen = dict(
+            diameter_top=2 * r_gen,
+            diameter_bottom=2 * r_gen,
+            net_height=h_gen,
         )
-    num_frames = loudness.shape[1]
 
-
-    # Select a container with random measurements
-    r_gen = np.random.uniform(*radius_range)
-    h_gen = np.random.uniform(*height_range)
-    duration_gen = np.random.uniform(*duration_range)
-
-    # Define measurements of the synthetic container
-    measurements_ = dict(
-        diameter_top=2 * r_gen,
-        diameter_bottom=2 * r_gen,
-        net_height=h_gen,
-    )
-
-    # Compute dynamics of pouring water in this container
-    T, L, F0, duration, physical_params = compute_dynamics(
-        measurements_, duration_gen, num_evals=num_frames,
-    )
-
-    # Generate synthetic audio
-    batch = {
-        "f0": torch.from_numpy(F0).to(loudness.device).float().unsqueeze(0),
-        "loudness": loudness,
-    }
-    with torch.no_grad():
-        latent = net.decoder(batch)
-        harmonic = net.harmonic_oscillator(latent)
-        noise = net.filtered_noise(latent)
-        audio_synth = harmonic + noise[:, : harmonic.shape[-1]]
-        audio = dict(
-            harmonic=harmonic, noise=noise, audio_synth=audio_synth,
+        y_gen = generate_sample(
+            y,
+            net,
+            sr,
+            stft,
+            measurements_gen,
+            duration_gen,
+            show=False,
+            # S=S,
+            # first_frame=first_frame,
         )
-        audio["audio_reverb"] = net.reverb(audio)
-        audio["a"] = latent["a"]
-        audio["c"] = latent["c"]
-    y_generated_dereverb = audio["audio_synth"].cpu()
-    y_generated_reverb = audio["audio_reverb"].cpu()
-    y_gen = y_generated_dereverb
 
+        metadata = {
+            # Real sample
+            "item_id": row["item_id"],
+            # Generated parameters
+            "measurements": measurements_gen,
+            "b": b,
+            "sr": sr,
+            "stft": stft,
+            "duration": len(y_gen) / sr,
+        }
 
-    # Show the results
-    show_result(
-        y, S, sr, stft, r_true, h_true, duration_true, y_gen, r_gen, h_gen, duration_gen,
-    )
-    import ipdb; ipdb.set_trace()
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+        audio_path = os.path.join(save_dir, "wav", f"{timestamp}.wav")
+        torchaudio.save(audio_path, y_gen, sr)
+        metadata_path = os.path.join(save_dir, "metadata", f"{timestamp}.json")
+        su.io.save_json(metadata, metadata_path)
