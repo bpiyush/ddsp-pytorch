@@ -57,6 +57,7 @@ def load_metadata():
         frame_dir=frame_dir,
         csv_path=csv_path,
         container_path=container_path,
+        split_dir=os.path.join(data_dir, "splits"),
     )
 
     df = pd.read_csv(csv_path)
@@ -417,9 +418,16 @@ if __name__ == "__main__":
     # Load CSV of real audio samples
     df, paths = load_metadata()
 
-    # Filter only cylindrical containers
-    df = df[df["shape"].isin(["cylindrical"])]
-    print(" [:::] Shape of CSV with only cylindrical containers: ", df.shape)
+    # Only consider samples from given split;
+    split_name = "v1.0/clean_unique_containers_all_91.txt"
+    split_path = os.path.join(paths["split_dir"], split_name)
+    item_ids = su.io.load_txt(split_path)
+    df = df[df["item_id"].isin(item_ids)]
+    print(" [:::] Shape of CSV with only samples from the split: ", df.shape)
+
+    # # Filter only cylindrical containers
+    # df = df[df["shape"].isin(["cylindrical"])]
+    # print(" [:::] Shape of CSV with only cylindrical containers: ", df.shape)
 
     # Define device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -438,8 +446,8 @@ if __name__ == "__main__":
     F_max = (sr // 2) / 2.
     F_min = 0
     radius_range = [1., 5.] # cm
-    height_range = [5., 20.] # cm
-    duration_range = [5., 15.] # sec
+    height_range = [5., 25.] # cm
+    duration_range = [3., 25.] # sec
     b = 0.01 # determines l(t) 
 
     # Define the frequency bins (typically, 257 bins)
@@ -451,7 +459,13 @@ if __name__ == "__main__":
 
     num_samples = 5000
 
-    save_dir = "/scratch/shared/beegfs/piyush/datasets/SyntheticPouring/v2.0"
+    version = "v3.0"
+    save_dir = f"/scratch/shared/beegfs/piyush/datasets/SyntheticPouring/{version}"
+    os.makedirs(save_dir, exist_ok=True)
+    wave_dir = os.path.join(save_dir, "wav")
+    os.makedirs(wave_dir, exist_ok=True)
+    meta_dir = os.path.join(save_dir, "metadata")
+    os.makedirs(meta_dir, exist_ok=True)
     iterator = su.log.tqdm_iterator(range(num_samples), desc="Generaing samples")
     for j in iterator:
 
@@ -472,10 +486,13 @@ if __name__ == "__main__":
         """
 
         # Get measurements & duration
+        """
+        # This is only needed for showing the original example
         m = row["measurements"]
         h_true = m["net_height"]
         r_true = 0.25 * (m["diameter_bottom"] + m["diameter_top"])
         duration_true = row["end_time"] - row["start_time"]
+        """
 
         # Select a container with random measurements
         r_gen = np.random.uniform(*radius_range)
@@ -510,11 +527,14 @@ if __name__ == "__main__":
             "sr": sr,
             "stft": stft,
             "duration": len(y_gen) / sr,
+            "split_path": split_path,
         }
 
         import datetime
-        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S%f")
         audio_path = os.path.join(save_dir, "wav", f"{timestamp}.wav")
         torchaudio.save(audio_path, y_gen, sr)
         metadata_path = os.path.join(save_dir, "metadata", f"{timestamp}.json")
         su.io.save_json(metadata, metadata_path)
+
+
