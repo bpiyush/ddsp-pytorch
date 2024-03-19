@@ -518,6 +518,9 @@ if __name__ == "__main__":
             # first_frame=first_frame,
         )
 
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S%f")
+
         metadata = {
             # Real sample
             "item_id": row["item_id"],
@@ -526,12 +529,10 @@ if __name__ == "__main__":
             "b": b,
             "sr": sr,
             "stft": stft,
-            "duration": len(y_gen) / sr,
+            "duration": duration_gen,
             "split_path": split_path,
         }
 
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S%f")
         audio_path = os.path.join(save_dir, "wav", f"{timestamp}.wav")
         torchaudio.save(audio_path, y_gen, sr)
         metadata_path = os.path.join(save_dir, "metadata", f"{timestamp}.json")
