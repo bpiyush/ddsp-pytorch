@@ -17,6 +17,8 @@ def get_data_root_from_hostname():
         "node407": "/var/scratch/pbagad/datasets/",
         "gnodee5": "/scratch/shared/beegfs/piyush/datasets/",
         "gnodeg2": "/scratch/shared/beegfs/piyush/datasets/",
+        # For local macbook
+        "Piyushs-MacBook-Pro": "/Users/piyush/datasets",
     }
     hostname = socket.gethostname()
     hostname = hostname.split(".")[0]

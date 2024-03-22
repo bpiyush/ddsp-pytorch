@@ -42,12 +42,15 @@ class AutoEncoder(nn.Module):
         hop_length = frame_length = int(config.sample_rate * config.frame_resolution)
 
         self.harmonic_oscillator = HarmonicOscillator(
-            sr=config.sample_rate, frame_length=hop_length
+            sr=config.sample_rate, frame_length=hop_length, device=config.device,
         )
 
-        self.filtered_noise = FilteredNoise(frame_length=hop_length)
+        self.filtered_noise = FilteredNoise(frame_length=hop_length, device=config.device)
 
-        self.reverb = TrainableFIRReverb(reverb_length=config.sample_rate * 3)
+        self.reverb = TrainableFIRReverb(
+            reverb_length=config.sample_rate * 3,
+            device=config.device,
+        )
 
         self.crepe = None
         self.config = config

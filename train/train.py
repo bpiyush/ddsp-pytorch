@@ -25,7 +25,15 @@ import warnings; warnings.filterwarnings("ignore")
 $ python train.py --batch_size 64 --lr 0.01 --use_reverb
 """
 
-config = setup(default_config="../configs/pld_80.yaml")
+
+# config_path = "../configs/pld_80.yaml"
+config_path = "../configs/pld_74_mac.yaml"
+config = setup(default_config=config_path)
+
+# Configure the config to use device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+config.device = device
+
 # config = setup(pdb_on_error=True, trace=False, autolog=False, default_config=dict(
 #     # general config
 #     ckpt="../../ddsp_ckpt/violin/200131.pth",  # checkpoint
@@ -77,9 +85,10 @@ print(OmegaConf.create(config.__dict__).pretty())
 set_seeds(config.seed)
 Trainer.set_experiment_name(config.experiment_name)
 
-net = AutoEncoder(config).cuda()
+device = torch.device(config.device)
+net = AutoEncoder(config).to(device)
 
-loss = MSSLoss([2048, 1024, 512, 256], use_reverb=config.use_reverb).cuda()
+loss = MSSLoss([2048, 1024, 512, 256], use_reverb=config.use_reverb).to(device)
 
 # Define evaluation metrics
 if config.metric == "mss":
@@ -134,6 +143,20 @@ valid_dataset = SupervisedAudioData(
     random_sample=False,
 )
 
+
+def check_dataset(dataset):
+    iterator = tqdm.tqdm(range(len(dataset)), total=len(dataset))
+    for i in iterator:
+        try:
+            item = dataset[i]
+        except Exception as e:
+            print(f"Error at {i}th item")
+            print(e)
+            break
+
+check_dataset(train_dataset)
+check_dataset(valid_dataset)
+        
 train_dataloader = DataLoader(
     train_dataset,
     batch_size=config.batch_size,
@@ -210,7 +233,7 @@ def validation_callback():
 
         bd = next(iter(data_loader))
         for k, v in bd.items():
-            bd[k] = v.cuda()
+            bd[k] = v.to(device)
 
         original_audio = bd["audio"][0]
         estimation = net(bd)
