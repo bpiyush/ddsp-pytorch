@@ -299,7 +299,9 @@ def show_result(
 
     # Show original example
     # su.log.print_update("Showing original example ", pos="left", color="blue")
-
+    assert r_true is not None
+    assert h_true is not None
+    assert duration_true is not None
     show_true_example(
         first_frame,
         S,
@@ -339,15 +341,54 @@ def show_result(
         )
 
 
+def show_audio(y, sr, ax=None, title="", wave=False):
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(14, 3))
+    
+    if wave:
+        librosa.display.waveshow(y, sr=sr, ax=ax)
+    else:
+        # Compute logmel spectrogram
+        H = librosa.feature.melspectrogram(
+            y=y, sr=sr, n_fft=512, hop_length=256, n_mels=64,
+        )
+        librosa.display.specshow(
+            librosa.power_to_db(H, ref=np.max), sr=sr,
+            x_axis='time', y_axis='mel', ax=ax,
+            n_fft=512, hop_length=256, 
+        )
+    ax.set_title(title)
+
+
+def show_real_and_generated_audio(y_true, y_gen, sr, title="", show=True, T=None, F0=None, suffix="random R and H"):
+    fig, axes = plt.subplots(2, 1, figsize=(14, 6))
+    show_audio(y_true, sr, ax=axes[0], title="Real")
+    ax = axes[1]
+    show_audio(y_gen, sr, ax=ax, title=f"Generated with {suffix}")
+    if T is not None and F0 is not None:
+        # Only plot N=100 points
+        T = T[::len(T) // 100]
+        F0 = F0[::len(F0) // 100]
+        ax.scatter(T, F0, color="white", s=3)
+    plt.suptitle(title)
+    plt.tight_layout()
+    if show:
+        plt.show()
+    else:
+        # Save as an image to show
+        plt.savefig("audio.png")
+
+
 def generate_sample(
         y,
         net,
         sr,
-        stft,
+        # stft,
         measurements_gen,
-        duration_gen,
-        S=None,
-        first_frame=None,
+        # duration_gen=None,
+        b=0.01,
+        # S=None,
+        # first_frame=None,
         show=False,
         increase_volume=True,
     ):
@@ -362,10 +403,11 @@ def generate_sample(
 
     # NOTE: duration_gen is not actually used because 
     # the model implicitly uses the duration of the input audio
+    duration_gen = y.shape[-1] / sr
 
     # Compute dynamics of pouring water in this container
     T, L, F0, duration, physical_params = compute_dynamics(
-        measurements_gen, duration_gen, num_evals=num_frames,
+        measurements_gen, duration_gen, num_evals=num_frames, b=b,
     )
 
     # Generate synthetic audio
@@ -392,9 +434,26 @@ def generate_sample(
         # Increase volume
         global_max = np.random.uniform(0.05, 0.3)
         y_gen = y_gen * global_max / y_gen.abs().max()
+    
 
     # Show the results
     if show:
+        R = np.round(measurements_gen["diameter_top"] / 2., 2)
+        H = np.round(measurements_gen["net_height"], 2)
+        show_real_and_generated_audio(
+            y_true=y.numpy()[0],
+            y_gen=y_gen.numpy()[0],
+            sr=sr,
+            show=False,
+            T=T,
+            F0=F0,
+            suffix=f"R={R}, H={H}, b={np.round(b, 3)}",
+        )
+        """
+        # NOTE: need to fix this when visualizing
+        r_true = None
+        h_true = None
+        duration_true = None
         show_result(
             y,
             S,
@@ -409,11 +468,23 @@ def generate_sample(
             duration_gen,
             first_frame,
         )
-    
+        """
+
     return y_gen
 
 
 if __name__ == "__main__":
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_samples", type=int, default=5000)
+    parser.add_argument(
+        "--nonlinear", action="store_true",
+        help="Use a nonlinear curve for the length of air column",
+    )
+    parser.add_argument("--version", type=str, default="v3.0")
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
 
     # Load CSV of real audio samples
     df, paths = load_metadata()
@@ -447,8 +518,11 @@ if __name__ == "__main__":
     F_min = 0
     radius_range = [1., 5.] # cm
     height_range = [5., 25.] # cm
-    duration_range = [3., 25.] # sec
-    b = 0.01 # determines l(t) 
+    # duration_range = [3., 25.] # sec
+    if not args.nonlinear:
+        b = 0.01 # determines l(t): b=0.01 implies l(t) is (appx) linear 
+    else:
+        b_range = [-0.5, 0.5]
 
     # Define the frequency bins (typically, 257 bins)
     frequencies = librosa.fft_frequencies(
@@ -457,9 +531,39 @@ if __name__ == "__main__":
     num_freqs = len(frequencies)
 
 
-    num_samples = 5000
+    if args.debug:
+        su.log.print_update("Debugging mode", pos="left", color="green")
+        # Just generate and show one example
+        i = 1
+        row = df.iloc[i].to_dict()
+        audio_path = row["audio_clip_path"]
+        y = load_audio(audio_path, config.sample_rate)
+        # Select a container with hand picked measurements
+        r_gen = 4.5
+        h_gen = 8.5
+        # b_gen = 0.01
+        # b_gen = 0.5
+        b_gen = -0.5
+        # Define measurements of the synthetic container
+        measurements_gen = dict(
+            diameter_top=2 * r_gen,
+            diameter_bottom=2 * r_gen,
+            net_height=h_gen,
+        )
+        y_gen = generate_sample(
+            y=y,
+            net=net,
+            sr=sr,
+            # stft,
+            measurements_gen=measurements_gen,
+            b=b_gen,
+            show=True,
+        )
+        exit()
 
-    version = "v3.0"
+
+    num_samples = args.num_samples
+    version = args.version
     save_dir = f"/scratch/shared/beegfs/piyush/datasets/SyntheticPouring/{version}"
     os.makedirs(save_dir, exist_ok=True)
     wave_dir = os.path.join(save_dir, "wav")
@@ -497,7 +601,12 @@ if __name__ == "__main__":
         # Select a container with random measurements
         r_gen = np.random.uniform(*radius_range)
         h_gen = np.random.uniform(*height_range)
-        duration_gen = np.random.uniform(*duration_range)
+        # duration_gen = np.random.uniform(*duration_range)
+
+        if args.nonlinear:
+            b_gen = np.random.uniform(*b_range)
+        else:
+            b_gen = b
 
         # Define measurements of the synthetic container
         measurements_gen = dict(
@@ -510,9 +619,10 @@ if __name__ == "__main__":
             y,
             net,
             sr,
-            stft,
+            # stft,
             measurements_gen,
-            duration_gen,
+            # duration_gen,
+            b=b_gen,
             show=False,
             # S=S,
             # first_frame=first_frame,
@@ -526,10 +636,10 @@ if __name__ == "__main__":
             "item_id": row["item_id"],
             # Generated parameters
             "measurements": measurements_gen,
-            "b": b,
+            "b": b_gen,
             "sr": sr,
             "stft": stft,
-            "duration": duration_gen,
+            "duration": y_gen.shape[-1] / sr,
             "split_path": split_path,
         }
 
