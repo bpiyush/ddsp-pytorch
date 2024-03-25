@@ -543,7 +543,7 @@ if __name__ == "__main__":
         h_gen = 8.5
         # b_gen = 0.01
         # b_gen = 0.5
-        b_gen = -0.5
+        b_gen = 0.5
         # Define measurements of the synthetic container
         measurements_gen = dict(
             diameter_top=2 * r_gen,
