@@ -118,6 +118,10 @@ def load_autoencoder_model(
     config = os.path.join(su.log.repo_path, "configs/pld_80.yaml")
     config = OmegaConf.load(config)
 
+    # Configure the config to use device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    config.device = device
+
     # Load model
     net = AutoEncoder(config)
 
@@ -514,14 +518,16 @@ if __name__ == "__main__":
     )
     parser.add_argument("--version", type=str, default="v3.0")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--split_name", default="v1.0/clean_unique_containers_all_91.txt")
     args = parser.parse_args()
 
     # Load CSV of real audio samples
     df, paths = load_metadata()
 
     # Only consider samples from given split;
-    split_name = "v1.0/clean_unique_containers_all_91.txt"
+    split_name = args.split_name
     split_path = os.path.join(paths["split_dir"], split_name)
+    assert os.path.exists(split_path), f"Split does not exist at {split_path}"
     item_ids = su.io.load_txt(split_path)
     df = df[df["item_id"].isin(item_ids)]
     print(" [:::] Shape of CSV with only samples from the split: ", df.shape)

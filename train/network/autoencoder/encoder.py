@@ -82,7 +82,7 @@ class Encoder(nn.Module):
         self.hop_length = int(config.sample_rate * config.frame_resolution)
 
         self.loudness_extractor = LoudnessExtractor(
-            sr=config.sample_rate, frame_length=self.hop_length,
+            sr=config.sample_rate, frame_length=self.hop_length, device=config.device,
         )
 
         if config.use_z:
