@@ -483,6 +483,9 @@ def generate_sample(
             F0=F0,
             suffix=f"R={R}, H={H}, b={np.round(b, 3)}",
         )
+
+        # Save generated audio
+        torchaudio.save("audio.wav", y_gen, sr)
         """
         # NOTE: need to fix this when visualizing
         r_true = None
@@ -519,6 +522,7 @@ if __name__ == "__main__":
     parser.add_argument("--version", type=str, default="v3.0")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--split_name", default="v1.0/clean_unique_containers_all_91.txt")
+    parser.add_argument("--multiple_harmonics", action="store_true")
     args = parser.parse_args()
 
     # Load CSV of real audio samples
@@ -570,16 +574,16 @@ if __name__ == "__main__":
     if args.debug:
         su.log.print_update("Debugging mode", pos="left", color="green")
         # Just generate and show one example
-        i = 1
+        i = 0
         row = df.iloc[i].to_dict()
         audio_path = row["audio_clip_path"]
         y = load_audio(audio_path, config.sample_rate)
         # Select a container with hand picked measurements
         r_gen = 4.5
         h_gen = 8.5
-        # b_gen = 0.01
+        b_gen = 0.01
         # b_gen = 0.5
-        b_gen = 0.5
+        # b_gen = -0.5
         # Define measurements of the synthetic container
         measurements_gen = dict(
             diameter_top=2 * r_gen,
@@ -594,6 +598,7 @@ if __name__ == "__main__":
             measurements_gen=measurements_gen,
             b=b_gen,
             show=True,
+            multiple_harmonics=args.multiple_harmonics,
         )
         exit()
 
@@ -660,6 +665,7 @@ if __name__ == "__main__":
             # duration_gen,
             b=b_gen,
             show=False,
+            multiple_harmonics=args.multiple_harmonics,
             # S=S,
             # first_frame=first_frame,
         )
