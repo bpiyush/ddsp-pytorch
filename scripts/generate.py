@@ -406,11 +406,11 @@ def generate_waveform(F0, loudness, net):
         audio = dict(
             harmonic=harmonic, noise=noise, audio_synth=audio_synth,
         )
-        audio["audio_reverb"] = net.reverb(audio)
+        # audio["audio_reverb"] = net.reverb(audio)
         audio["a"] = latent["a"]
         audio["c"] = latent["c"]
     y_generated_dereverb = audio["audio_synth"].cpu()
-    y_generated_reverb = audio["audio_reverb"].cpu()
+    # y_generated_reverb = audio["audio_reverb"].cpu()
     y_gen = y_generated_dereverb
     return y_gen
 
@@ -449,25 +449,7 @@ def generate_sample(
 
 
     if not multiple_harmonics:
-        # Generate synthetic audio
-        batch = {
-            "f0": torch.from_numpy(F0).to(loudness.device).float().unsqueeze(0),
-            "loudness": loudness,
-        }
-        with torch.no_grad():
-            latent = net.decoder(batch)
-            harmonic = net.harmonic_oscillator(latent)
-            noise = net.filtered_noise(latent)
-            audio_synth = harmonic + noise[:, : harmonic.shape[-1]]
-            audio = dict(
-                harmonic=harmonic, noise=noise, audio_synth=audio_synth,
-            )
-            audio["audio_reverb"] = net.reverb(audio)
-            audio["a"] = latent["a"]
-            audio["c"] = latent["c"]
-        y_generated_dereverb = audio["audio_synth"].cpu()
-        y_generated_reverb = audio["audio_reverb"].cpu()
-        y_gen = y_generated_dereverb
+        y_gen = generate_waveform(F0, loudness, net)
     else:
         # Use multiple harmonics: [1xF0, 3xF0]
         y_gen0 = generate_waveform(F0, loudness, net)
