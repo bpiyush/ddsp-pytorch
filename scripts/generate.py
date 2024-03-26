@@ -147,7 +147,16 @@ def load_autoencoder_model(
 def load_audio(audio_path, sample_rate):
 
     # Load
-    y, true_sample_rate = torchaudio.load(audio_path)
+    try:
+        y, true_sample_rate = torchaudio.load(audio_path)
+    except:
+        # Failed to load audio
+        print(f" [:::] Failed to load audio at: {audio_path}. Skipping.")
+        return None
+
+    # If multi-channel, take mean
+    if len(y.shape) == 2:
+        y = y.mean(dim=0, keepdim=True)
 
     # Resample if sampling rate is not equal to model's
     if true_sample_rate != sample_rate:
@@ -364,7 +373,7 @@ def show_audio(y, sr, ax=None, title="", wave=False):
     ax.set_title(title)
 
 
-def show_real_and_generated_audio(y_true, y_gen, sr, title="", show=True, T=None, F0=None, suffix="random R and H"):
+def show_real_and_generated_audio(y_true, y_gen, sr, title="", show=True, T=None, F0=None, suffix="random R and H", xlabel=None):
     fig, axes = plt.subplots(2, 1, figsize=(14, 6))
     show_audio(y_true, sr, ax=axes[0], title="Real")
     ax = axes[1]
@@ -375,6 +384,7 @@ def show_real_and_generated_audio(y_true, y_gen, sr, title="", show=True, T=None
         F0 = F0[::len(F0) // 100]
         ax.scatter(T, F0, color="white", s=3)
     plt.suptitle(title)
+    ax.set_xlabel(xlabel, fontsize=9)
     plt.tight_layout()
     if show:
         plt.show()
@@ -482,6 +492,7 @@ def generate_sample(
             T=T,
             F0=F0,
             suffix=f"R={R}, H={H}, b={np.round(b, 3)}",
+            xlabel=audio_path,
         )
 
         # Save generated audio
@@ -521,10 +532,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--version", type=str, default="v3.0")
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--split_name", default="v1.0/clean_unique_containers_all_91.txt")
+    # parser.add_argument("--split_name", default="v1.0/clean_unique_containers_all_91.txt")
     parser.add_argument("--multiple_harmonics", action="store_true")
+    parser.add_argument("--csv", type=str, default="./source_data/v0.0_20240325.csv")
     args = parser.parse_args()
 
+    """
     # Load CSV of real audio samples
     df, paths = load_metadata()
 
@@ -539,6 +552,12 @@ if __name__ == "__main__":
     # # Filter only cylindrical containers
     # df = df[df["shape"].isin(["cylindrical"])]
     # print(" [:::] Shape of CSV with only cylindrical containers: ", df.shape)
+    """
+    assert os.path.exists(args.csv), f"CSV does not exist at {args.csv}"
+    su.log.print_update("Loading CSV ", pos="left", color="green")
+    df = pd.read_csv(args.csv)
+    print(" [:::] Shape of source CSV: ", df.shape)
+
 
     # Define device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -574,10 +593,16 @@ if __name__ == "__main__":
     if args.debug:
         su.log.print_update("Debugging mode", pos="left", color="green")
         # Just generate and show one example
-        i = 0
+        # i = 0
+        i = np.random.choice(len(df))
         row = df.iloc[i].to_dict()
-        audio_path = row["audio_clip_path"]
+        item_id = row["item_id"]
+        # audio_path = row["audio_clip_path"]
+        audio_path = row["path"]
         y = load_audio(audio_path, config.sample_rate)
+        if y is None:
+            # Failed
+            exit("Failed to load audio. Quitting.")
         # Select a container with hand picked measurements
         r_gen = 4.5
         h_gen = 8.5
@@ -617,10 +642,16 @@ if __name__ == "__main__":
         # Sample a random row of real audio
         i = np.random.choice(len(df))
         row = df.iloc[i].to_dict()
-        audio_path = row["audio_clip_path"]
+        item_id = row["item_id"]
+        # audio_path = row["audio_clip_path"]
+        audio_path = row["path"]
 
         # Load audio
         y = load_audio(audio_path, config.sample_rate)
+
+        if y is None:
+            # Failed to load audio
+            continue
 
         """
         # Get logmelspectrogram
@@ -675,14 +706,15 @@ if __name__ == "__main__":
 
         metadata = {
             # Real sample
-            "item_id": row["item_id"],
+            "item_id": item_id,
             # Generated parameters
             "measurements": measurements_gen,
             "b": b_gen,
             "sr": sr,
             "stft": stft,
             "duration": y_gen.shape[-1] / sr,
-            "split_path": split_path,
+            # "split_path": split_path,
+            "source_audio_path": audio_path,
         }
 
         audio_path = os.path.join(save_dir, "wav", f"{timestamp}.wav")
