@@ -1,4 +1,4 @@
-"""Debugging file to generate samples before generating large-scale."""
+"""File to generate samples with both axial and radial resonance."""
 import os
 import sys
 
