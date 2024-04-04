@@ -10,12 +10,17 @@ import shared.utils as su
 
 
 if __name__ == "__main__":
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", type=str, default="v6.0")
+    parser.add_argument("--source_data", type=str, default="./source_data/v0.1_20240325.csv")
+    args = parser.parse_args()
+
     data_root = su.paths.get_data_root_from_hostname()
     data_dir = os.path.join(data_root, "SyntheticPouring")
-    version = "v4.0"
-    source_data = "./source_data/v0.1_20240325.csv"
-    # version = "v5.0"
-    # source_data = "./source_data/v0.0_20240325.csv"
+    version = args.version
+    source_data = args.source_data
 
     # Create split directory
     split_dir = os.path.join(data_dir, version, "splits")

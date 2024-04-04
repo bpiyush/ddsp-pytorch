@@ -303,7 +303,7 @@ if __name__ == "__main__":
         Y = np.random.uniform(*Y_range[container_material])
         rho_g = np.random.uniform(*rho_g_range[container_material])
         a = np.random.uniform(*a_range)
-        liquid_temperature = np.random.choice(liquid_temperature)
+        liquid_temperature = np.random.choice(liquid_temperatures)
         rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
 
         # Sample timestamps uniformly
