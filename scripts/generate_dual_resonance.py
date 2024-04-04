@@ -177,9 +177,22 @@ def show_real_and_generated_audio(
 
 if __name__ == "__main__":
 
-    csv_path = "./source_data/v0.1_20240325.csv"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_samples", type=int, default=10000)
+    parser.add_argument(
+        "--nonlinear", action="store_true",
+        help="Use a nonlinear curve for the length of air column",
+    )
+    parser.add_argument("--version", type=str, default="v6.0")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--multiple_harmonics", action="store_true")
+    parser.add_argument("--csv", type=str, default="./source_data/v0.1_20240325.csv")
+    args = parser.parse_args()
+
 
     # Load source data file
+    csv_path = args.csv
     assert os.path.exists(csv_path), f"CSV does not exist at {csv_path}"
     su.log.print_update("Loading CSV ", pos="left", color="green")
     df = pd.read_csv(csv_path)
@@ -197,91 +210,248 @@ if __name__ == "__main__":
     stft = dict(n_fft=512, hop_length=256, n_mels=64)
     margin = 8.
 
-    # Load audio from a real sample to condition the model for magnitude
-    i = 1
-    row = df.iloc[i].to_dict()
-    item_id = row["item_id"]
-    audio_path = row["path"]
-    y_real = load_audio(audio_path, config.sample_rate)
+    # Define ranges for different physical parameters
+    beta_range = [0.3, 0.7]
+    R_range = [1., 5.] # cm
+    H_range = [5., 25.] # cm
+    if not args.nonlinear:
+        b_range = [0.01, 0.01] # determines l(t): b=0.01 implies l(t) is (appx) linear 
+    else:
+        b_range = [-0.5, 0.5]
+    container_materials = [
+        "glass", "plastic", "paperboard", "ceramic", "steel",
+    ]
+    liquid_temperatures = [
+        "hot", "normal",
+    ]
+    Y_range = {
+        "glass": [60e9, 80e9],  # 60 - 80 GPa
+        "plastic": [1e9, 4e9],  # 1 - 4 GPa (wide range for different plastics)
+        "paperboard": [2e9, 8e9],  # 2 - 8 GPa (depending on density and composition)
+        "ceramic": [120e9, 300e9],  # 120 - 300 GPa (wide range for different ceramics)
+        "steel": [190e9, 210e9]  # 190 - 210 GPa (for typical structural steels)
+    }
+    rho_g_range = {
+        "glass": [2400, 2800],  # 2400 - 2800 kg/m³
+        "plastic": [900, 990],  # 900 - 1400 kg/m³ (wide range for different plastics)
+        "paperboard": [600, 1000],  # 600 - 1000 kg/m³ (depending on composition and density)
+        "ceramic": [2500, 4000],  # 2500 - 4000 kg/m³ (wide range for different ceramics)
+        "steel": [7800, 8050]  # 7800 - 8050 kg/m³ (for typical structural steels)
+    }
+    rho_l_range = {
+        "hot": [950., 970.],
+        "normal": [998., 1002.],
+    }
+    a_range = [0.0005, 0.005] # 1 - 5 mm thickness
 
-    # Get loudness from the real audio
-    with torch.no_grad():
-        loudness = net.encoder.loudness_extractor(
-            {"audio": y_real.to(device)},
-        )
-    num_frames = loudness.shape[1]
-
-
-    # Sample a random cylindrical container with following properties
-
-    # Duration of video (fixed by the conditioning audio)
-    T = y_real.shape[1] / config.sample_rate
-
-    # Flow rate parameter (for now, constant)
-    b = 0.01
-
-    # End correction parameter
-    beta = 0.62
-
-    # Dimensions: radius R and height H
-    # R = np.random.uniform(2., 8.)
-    R = 3.5
-    # H = np.random.uniform(10., 20.)
-    H = 12.
-
-    # Physical properties of container
-    # For now, just picking ones for plastic
-    # Young's modulus
-    Y = 1.5 * 1e9 # N/m^2
-    # Density of container
-    rho_g = 910. # Kg/m^3
-    # Thickness of container
-    a = 0.003 # m (3mm)
-    # Density of liquid (cold water)
-    rho_l = 998. # Kg/m^3
-
-
-    # Sample timestamps uniformly
-    timestamps = np.linspace(0., T, num_frames, endpoint=True)
-
-    # Compute length of air column
-    lengths = compute_length_of_air_column_cylinder(timestamps, T, H, b)
-
-    # Compute axial frequencies
-    frequencies_axial = compute_frequencies_axial_cylinder(
-        lengths=lengths, radius=R, beta=beta,
-    )
-
-    # Compute radial frequencies
-    heights = H - lengths
-    frequencies_radial = compute_radial_frequency_cylinder(
-        heights=heights/100., R=R/100., H=H/100., Y=Y, rho_g=rho_g, a=a, rho_l=rho_l,
-    )
-
-    # Generate audio with radial frequencies
-    y_gene_radial = generate_audio(net, loudness, frequencies_radial)
-
-    # Generate audio with axial frequencies
-    y_gene_axial = generate_audio(net, loudness, frequencies_axial)
-
-    # Mix the two with a weight factor
+    # Mixing parameter
     alpha = 0.8
-    y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
 
-    # Save sample to visualise
-    radial_suffix = f"Y={Y:.2e}, rho_g={rho_g}, a={a}, rho_l={rho_l}"
-    axial_suffix = f"R={R}, H={H}, b={np.round(b, 3)}"
-    show_real_and_generated_audio(
-        y_true=y_real.numpy()[0],
-        y_gen=y_gene.numpy()[0],
-        sr=sr,
-        show=False,
-        T=timestamps,
-        # F0_radial=frequencies_radial,
-        F0_radial=None,
-        # F0_axial=frequencies_axial,
-        F0_axial=None,
-        suffix=f"{axial_suffix} | {radial_suffix} | alpha={alpha}",
-        # xlabel=audio_path,
-    )
-    torchaudio.save(f"./audio.wav", y_gene, sr)
+
+    if args.debug:
+        # Load audio from a real sample to condition the model for magnitude
+        i = 1
+        row = df.iloc[i].to_dict()
+        item_id = row["item_id"]
+        audio_path = row["path"]
+
+        # Get loudness from the real audio
+        y_real = load_audio(audio_path, config.sample_rate)
+        with torch.no_grad():
+            loudness = net.encoder.loudness_extractor(
+                {"audio": y_real.to(device)},
+            )
+        num_frames = loudness.shape[1]
+
+
+        # Sample a random cylindrical container with following properties
+        """
+        # Duration of video (fixed by the conditioning audio)
+        T = y_real.shape[1] / config.sample_rate
+
+        # Flow rate parameter (for now, constant)
+        b = 0.01
+
+        # End correction parameter
+        beta = 0.62
+
+        # Dimensions: radius R and height H
+        # R = np.random.uniform(2., 8.)
+        R = 3.5
+        # H = np.random.uniform(10., 20.)
+        H = 12.
+
+        # Physical properties of container
+        # For now, just picking ones for plastic
+        # Young's modulus
+        Y = 1.5 * 1e9 # N/m^2
+        # Density of container
+        rho_g = 910. # Kg/m^3
+        # Thickness of container
+        a = 0.003 # m (3mm)
+        # Density of liquid (cold water)
+        rho_l = 998. # Kg/m^3
+        """
+
+        # Randomly sample parameters
+        T = y_real.shape[1] / config.sample_rate
+        b = np.random.uniform(*b_range)
+        beta = np.random.uniform(*beta_range)
+        H = np.random.uniform(*H_range)
+        R = np.random.uniform(*R_range)
+        container_material = np.random.choice(container_materials)
+        Y = np.random.uniform(*Y_range[container_material])
+        rho_g = np.random.uniform(*rho_g_range[container_material])
+        a = np.random.uniform(*a_range)
+        liquid_temperature = np.random.choice(liquid_temperature)
+        rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
+
+        # Sample timestamps uniformly
+        timestamps = np.linspace(0., T, num_frames, endpoint=True)
+
+        # Compute length of air column
+        lengths = compute_length_of_air_column_cylinder(timestamps, T, H, b)
+
+        # Compute axial frequencies
+        frequencies_axial = compute_frequencies_axial_cylinder(
+            lengths=lengths, radius=R, beta=beta,
+        )
+
+        # Compute radial frequencies
+        heights = H - lengths
+        frequencies_radial = compute_radial_frequency_cylinder(
+            heights=heights/100., R=R/100., H=H/100., Y=Y, rho_g=rho_g, a=a, rho_l=rho_l,
+        )
+
+        # Generate audio with radial frequencies
+        y_gene_radial = generate_audio(net, loudness, frequencies_radial)
+
+        # Generate audio with axial frequencies
+        y_gene_axial = generate_audio(net, loudness, frequencies_axial)
+
+        # Mix the two with a weight factor
+        alpha = 0.8
+        y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
+
+        # Save sample to visualise
+        radial_suffix = f"Y={Y:.2e}, rho_g={rho_g:.2f}, a={a:.4f}, rho_l={rho_l:.2f}"
+        axial_suffix = f"R={R:.2f}, H={H:.2f}, b={b:.2f}, beta={beta:.2f}"
+        FMAX = sr // 2
+        # Find indices where both frequencies < FMAX
+        indices = np.where((frequencies_radial < FMAX) & (frequencies_axial < FMAX))[0]
+        show_real_and_generated_audio(
+            y_true=y_real.numpy()[0],
+            y_gen=y_gene.numpy()[0],
+            sr=sr,
+            show=False,
+            T=timestamps[indices],
+            F0_radial=frequencies_radial[indices],
+            # F0_radial=None,
+            F0_axial=frequencies_axial[indices],
+            # F0_axial=None,
+            suffix=f"{axial_suffix} | {radial_suffix} | alpha={alpha}",
+            xlabel=audio_path,
+        )
+        torchaudio.save(f"./audio.wav", y_gene, sr)
+
+        exit()
+
+
+    num_samples = args.num_samples
+    version = args.version
+    save_dir = f"/scratch/shared/beegfs/piyush/datasets/SyntheticPouring/{version}"
+    os.makedirs(save_dir, exist_ok=True)
+    wave_dir = os.path.join(save_dir, "wav")
+    os.makedirs(wave_dir, exist_ok=True)
+    meta_dir = os.path.join(save_dir, "metadata")
+    os.makedirs(meta_dir, exist_ok=True)
+    iterator = su.log.tqdm_iterator(range(num_samples), desc="Generaing samples")
+    for j in iterator:
+
+        # Sample a random row of real audio
+        i = np.random.choice(len(df))
+        row = df.iloc[i].to_dict()
+        item_id = row["item_id"]
+        audio_path = row["path"]
+
+        # Get loudness from the real audio
+        y_real = load_audio(audio_path, config.sample_rate)
+        with torch.no_grad():
+            loudness = net.encoder.loudness_extractor(
+                {"audio": y_real.to(device)},
+            )
+        num_frames = loudness.shape[1]
+
+        T = y_real.shape[1] / config.sample_rate
+        b = np.random.uniform(*b_range)
+        beta = np.random.uniform(*beta_range)
+        H = np.random.uniform(*H_range)
+        R = np.random.uniform(*R_range)
+
+        # Sample a container material & thickness
+        container_material = np.random.choice(container_materials)
+        Y = np.random.uniform(*Y_range[container_material])
+        rho_g = np.random.uniform(*rho_g_range[container_material])
+        a = np.random.uniform(*a_range)
+
+        # sample a liquid temperature
+        liquid_temperature = np.random.choice(liquid_temperatures)
+        rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
+
+        # Generate
+
+        # Sample timestamps uniformly
+        timestamps = np.linspace(0., T, num_frames, endpoint=True)
+
+        # Compute length of air column
+        lengths = compute_length_of_air_column_cylinder(timestamps, T, H, b)
+
+        # Compute axial frequencies
+        frequencies_axial = compute_frequencies_axial_cylinder(
+            lengths=lengths, radius=R, beta=beta,
+        )
+
+        # Compute radial frequencies
+        heights = H - lengths
+        frequencies_radial = compute_radial_frequency_cylinder(
+            heights=heights/100., R=R/100., H=H/100., Y=Y, rho_g=rho_g, a=a, rho_l=rho_l,
+        )
+
+        # Generate audio with radial frequencies
+        y_gene_radial = generate_audio(net, loudness, frequencies_radial).cpu()
+
+        # Generate audio with axial frequencies
+        y_gene_axial = generate_audio(net, loudness, frequencies_axial).cpu()
+
+        loudness = loudness.cpu()
+
+        # Mix the two with a weight factor
+        y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
+
+
+        # Save
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%y%m%d_%H%M%S%f")
+        metadata = {
+            # Real sample
+            "item_id": item_id,
+            "source_audio_path": audio_path,
+            # Generated parameters
+            "duration": T,
+            "height": H,
+            "radius": R,
+            "beta": beta,
+            "b": b,
+            "container_material": container_material,
+            "Y": Y,
+            "rho_g": rho_g,
+            "a": a,
+            "liquid_temperature": liquid_temperature,
+            "rho_l": rho_l,
+            "alpha": alpha,   
+        }
+
+        audio_path = os.path.join(save_dir, "wav", f"{timestamp}.wav")
+        torchaudio.save(audio_path, y_gene, sr)
+        metadata_path = os.path.join(save_dir, "metadata", f"{timestamp}.json")
+        su.io.save_json(metadata, metadata_path)
