@@ -218,6 +218,17 @@ if __name__ == "__main__":
         b_range = [0.01, 0.01] # determines l(t): b=0.01 implies l(t) is (appx) linear 
     else:
         b_range = [-0.5, 0.5]
+    
+    # Load container metadata
+    repo_path = su.log.repo_path
+    yaml_path = os.path.join(repo_path, "../PouringLiquidsData", "annotations/materials.yaml")
+    materials = su.io.load_yml(yaml_path)
+
+    # Load liquid metadata
+    yaml_path = os.path.join(repo_path, "../PouringLiquidsData", "annotations/liquids.yaml")
+    liquids = su.io.load_yml(yaml_path)
+
+    """
     container_materials = [
         "glass", "plastic", "paperboard", "ceramic", "steel",
     ]
@@ -242,10 +253,11 @@ if __name__ == "__main__":
         "hot": [950., 970.],
         "normal": [998., 1002.],
     }
+    """
     a_range = [0.0005, 0.005] # 1 - 5 mm thickness
 
     # Mixing parameter
-    alpha = 0.8
+    alpha = 0.6
 
 
     if args.debug:
@@ -292,6 +304,7 @@ if __name__ == "__main__":
         # Density of liquid (cold water)
         rho_l = 998. # Kg/m^3
         """
+        # import ipdb; ipdb.set_trace()
 
         # Randomly sample parameters
         T = y_real.shape[1] / config.sample_rate
@@ -299,12 +312,34 @@ if __name__ == "__main__":
         beta = np.random.uniform(*beta_range)
         H = np.random.uniform(*H_range)
         R = np.random.uniform(*R_range)
-        container_material = np.random.choice(container_materials)
-        Y = np.random.uniform(*Y_range[container_material])
-        rho_g = np.random.uniform(*rho_g_range[container_material])
+
+        # Thickness of container
         a = np.random.uniform(*a_range)
-        liquid_temperature = np.random.choice(liquid_temperatures)
-        rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
+
+        # Sample a material
+        material = np.random.choice(list(materials.keys()))
+        material_info = materials[material]
+
+        x = material_info["youngs_modulus_range"]
+        x = [eval(y) for y in x]
+        Y = np.random.uniform(*x)
+
+        x = material_info["density_range"]
+        # x = [eval(y) for y in x]
+        rho_g = np.random.uniform(*x)
+
+        # Sample a liquid
+        liquid = np.random.choice(list(liquids.keys()))
+
+        x = liquids[liquid]["density_range"]
+        # x = [eval(y) for y in x]
+        rho_l = np.random.uniform(*x)
+
+        # container_material = np.random.choice(container_materials)
+        # Y = np.random.uniform(*Y_range[container_material])
+        # rho_g = np.random.uniform(*rho_g_range[container_material])
+        # liquid_temperature = np.random.choice(liquid_temperatures)
+        # rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
 
         # Sample timestamps uniformly
         timestamps = np.linspace(0., T, num_frames, endpoint=True)
@@ -330,7 +365,6 @@ if __name__ == "__main__":
         y_gene_axial = generate_audio(net, loudness, frequencies_axial)
 
         # Mix the two with a weight factor
-        alpha = 0.8
         y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
 
         # Save sample to visualise
@@ -382,21 +416,34 @@ if __name__ == "__main__":
             )
         num_frames = loudness.shape[1]
 
+        # Randomly sample parameters
         T = y_real.shape[1] / config.sample_rate
         b = np.random.uniform(*b_range)
         beta = np.random.uniform(*beta_range)
         H = np.random.uniform(*H_range)
         R = np.random.uniform(*R_range)
 
-        # Sample a container material & thickness
-        container_material = np.random.choice(container_materials)
-        Y = np.random.uniform(*Y_range[container_material])
-        rho_g = np.random.uniform(*rho_g_range[container_material])
+        # Thickness of container
         a = np.random.uniform(*a_range)
 
-        # sample a liquid temperature
-        liquid_temperature = np.random.choice(liquid_temperatures)
-        rho_l = np.random.uniform(*rho_l_range[liquid_temperature])
+        # Sample a material
+        material = np.random.choice(list(materials.keys()))
+        material_info = materials[material]
+
+        x = material_info["youngs_modulus_range"]
+        x = [eval(y) for y in x]
+        Y = np.random.uniform(*x)
+
+        x = material_info["density_range"]
+        # x = [eval(y) for y in x]
+        rho_g = np.random.uniform(*x)
+
+        # Sample a liquid
+        liquid = np.random.choice(list(liquids.keys()))
+
+        x = liquids[liquid]["density_range"]
+        # x = [eval(y) for y in x]
+        rho_l = np.random.uniform(*x)
 
         # Generate
 
@@ -442,11 +489,11 @@ if __name__ == "__main__":
             "radius": R,
             "beta": beta,
             "b": b,
-            "container_material": container_material,
+            "container_material": material,
             "Y": Y,
             "rho_g": rho_g,
             "a": a,
-            "liquid_temperature": liquid_temperature,
+            "liquid_temperature": liquid,
             "rho_l": rho_l,
             "alpha": alpha,   
         }
