@@ -188,6 +188,8 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--multiple_harmonics", action="store_true")
     parser.add_argument("--csv", type=str, default="./source_data/v0.1_20240325.csv")
+    parser.add_argument("--save_both", action="store_true")
+    parser.add_argument("--alpha", type=float, default=0.6)
     args = parser.parse_args()
 
 
@@ -257,7 +259,8 @@ if __name__ == "__main__":
     a_range = [0.0005, 0.005] # 1 - 5 mm thickness
 
     # Mixing parameter
-    alpha = 0.6
+    # alpha = 0.6
+    alpha = args.alpha
 
 
     if args.debug:
@@ -473,7 +476,10 @@ if __name__ == "__main__":
         loudness = loudness.cpu()
 
         # Mix the two with a weight factor
-        y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
+        if args.alpha > 0.:
+            y_gene = alpha * y_gene_axial + (1 - alpha) * y_gene_radial
+        else:
+            y_gene = y_gene_axial + y_gene_radial
 
 
         # Save
@@ -502,3 +508,11 @@ if __name__ == "__main__":
         torchaudio.save(audio_path, y_gene, sr)
         metadata_path = os.path.join(save_dir, "metadata", f"{timestamp}.json")
         su.io.save_json(metadata, metadata_path)
+
+        if args.save_both:
+            # Save radial
+            audio_path = os.path.join(save_dir, "wav", f"{timestamp}_radial.wav")
+            torchaudio.save(audio_path, y_gene_radial, sr)
+            # Save axial
+            audio_path = os.path.join(save_dir, "wav", f"{timestamp}_axial.wav")
+            torchaudio.save(audio_path, y_gene_axial, sr)
