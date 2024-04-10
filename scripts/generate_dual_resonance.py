@@ -500,6 +500,7 @@ if __name__ == "__main__":
             "rho_g": rho_g,
             "a": a,
             "liquid_temperature": liquid,
+            "liquid": liquid,
             "rho_l": rho_l,
             "alpha": alpha,   
         }
