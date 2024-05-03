@@ -6,6 +6,7 @@ from glob import glob
 
 
 DATA_ROOT = "/scratch/shared/beegfs/piyush/datasets/"
+import shared.utils as su
 
 
 if __name__ == "__main__":
@@ -19,6 +20,17 @@ if __name__ == "__main__":
     df["path"].extend(files)
     df["item_id"].extend(item_ids)
     df["ds_name"].extend(["PouringLiquidsData"] * len(files))
+    df = pd.DataFrame(df)
+
+    split_dir = "/scratch/shared/beegfs/piyush/datasets/PouringLiquidsData/splits"
+    split_name = "v2.0/transparent_cylindrical+semiconical_train-20240415.txt"
+    split_path = os.path.join(split_dir, split_name)
+    split = su.io.load_txt(split_path)
+    df = df[df.item_id.isin(split)]
+
+    save_path = "./source_data/v0.3.20240503.csv"
+    df.to_csv(save_path, index=False)
+    import ipdb; ipdb.set_trace()
 
     # PouringIROS2019
     audio_dir = os.path.join(DATA_ROOT, "PouringIROS2019/resized_data_cut_clips_audio")
