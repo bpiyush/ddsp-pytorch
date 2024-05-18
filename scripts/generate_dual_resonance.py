@@ -143,13 +143,14 @@ def show_real_and_generated_audio(
         F0_axial=None,
         suffix="random R and H",
         xlabel=None,
+        n_show=70,
     ):
     fig, axes = plt.subplots(2, 1, figsize=(14, 6))
     show_audio(y_true, sr, ax=axes[0], title="Real")
     ax = axes[1]
     show_audio(y_gen, sr, ax=ax, title=f"Generated with {suffix}")
     if T is not None:
-        n = 70
+        n = n_show
         if F0_radial is not None:
             # Only plot N=n points
             F0 = F0_radial

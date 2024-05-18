@@ -23,13 +23,16 @@ if __name__ == "__main__":
     df = pd.DataFrame(df)
 
     split_dir = "/scratch/shared/beegfs/piyush/datasets/PouringLiquidsData/splits"
-    split_name = "v2.0/transparent_cylindrical+semiconical_train-20240415.txt"
+    # split_name = "v2.0/transparent_cylindrical+semiconical_train-20240415.txt"
+    split_name = "v3.0/transparent-v2-train.txt"
     split_path = os.path.join(split_dir, split_name)
     split = su.io.load_txt(split_path)
     df = df[df.item_id.isin(split)]
 
-    save_path = "./source_data/v0.3.20240503.csv"
+    # save_path = "./source_data/v0.3.20240503.csv"
+    save_path = "./source_data/v0.4.20240518.csv"
     df.to_csv(save_path, index=False)
+    print("Created CSV with {} rows.".format(len(df)))
     import ipdb; ipdb.set_trace()
 
     # PouringIROS2019

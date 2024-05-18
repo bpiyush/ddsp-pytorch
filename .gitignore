@@ -5,3 +5,4 @@ train/*.csv
 *.wav
 components/ptcrepe
 *.png
+*.pdf
