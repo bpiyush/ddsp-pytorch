@@ -1,4 +1,5 @@
 """Audio utils"""
+import torch
 import librosa
 import numpy as np
 import matplotlib.pyplot as plt
@@ -171,3 +172,72 @@ def show_single_spectrogram(
 
     if show:
         plt.show()
+
+
+def librosa_harmonic_spectrogram_db(y, sr=16000, n_fft=512, hop_length=256, margin=16., n_mels=64):
+    if isinstance(y, torch.Tensor):
+        y = y.numpy()
+    if len(y.shape) == 2:
+        y = y.mean(axis=0)
+    D = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, center=True)
+    DH, DP = librosa.decompose.hpss(D, margin=margin)
+    amplitude_h = np.sqrt(2) * np.abs(DH)
+    if n_mels is None:
+        # Usual dB spectrogram
+        SH = librosa.amplitude_to_db(amplitude_h, ref=np.max)
+    else:
+        # Mel-scaled dB spectrogram
+        S = librosa.amplitude_to_db(amplitude_h)
+        SH = librosa.feature.melspectrogram(S=S, n_mels=n_mels, sr=sr)
+    return SH
+
+
+def show_logmelspectrogram(
+        S,
+        sr,
+        n_fft=512,
+        hop_length=256,
+        n_mels=64,
+        figsize=(8, 3),
+        ax=None,
+        show=True,
+        title="LogMelSpectrogram",
+    ):
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    librosa.display.specshow(
+        S,
+        sr=sr,
+        hop_length=hop_length,
+        n_fft=n_fft,
+        y_axis='mel',
+        x_axis='time',
+        ax=ax,
+    )
+    ax.set_title(title)
+    if show:
+        plt.show()
+
+
+# Load original audio to compute loudness
+import torchaudio
+def load_audio_torchaudio(audio_path, sample_rate):
+
+    # Load
+    try:
+        y, true_sample_rate = torchaudio.load(audio_path)
+    except:
+        # Failed to load audio
+        print(f" [:::] Failed to load audio at: {audio_path}. Skipping.")
+        return None
+
+    # If multi-channel, take mean
+    if len(y.shape) == 2:
+        y = y.mean(dim=0, keepdim=True)
+
+    # Resample if sampling rate is not equal to model's
+    if true_sample_rate != sample_rate:
+        resampler = torchaudio.transforms.Resample(true_sample_rate, sample_rate)
+        y = resampler(y)
+
+    return y

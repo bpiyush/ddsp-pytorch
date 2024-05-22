@@ -89,7 +89,7 @@ def compute_xi_cylinder(rho_l, rho_g, R, a):
     return xi
 
 
-def compute_radial_frequency_cylinder(heights, R, H, Y, rho_g, a, rho_l, power=4, mode=1):
+def compute_radial_frequency_cylinder(heights, R, H, Y, rho_g, a, rho_l, power=3, mode=1):
     """
     Computes radial resonance frequency for cylinder.
 
@@ -144,8 +144,9 @@ def show_real_and_generated_audio(
         suffix="random R and H",
         xlabel=None,
         n_show=70,
+        figsize=(14, 6),
     ):
-    fig, axes = plt.subplots(2, 1, figsize=(14, 6))
+    fig, axes = plt.subplots(2, 1, figsize=figsize)
     show_audio(y_true, sr, ax=axes[0], title="Real")
     ax = axes[1]
     show_audio(y_gen, sr, ax=ax, title=f"Generated with {suffix}")

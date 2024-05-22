@@ -9,3 +9,4 @@ import shared.utils.visualize as visualize
 import shared.utils.metrics as metrics
 import shared.utils.misc as misc
 import shared.utils.keypoint_matching as keypoint_matching
+import shared.utils.physics as physics

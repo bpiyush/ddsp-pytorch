@@ -308,6 +308,7 @@ def show_result(
         duration_gen,
         first_frame,
         show=False,
+        figsize=(11, 3.4),
     ):
 
     # Show original example
@@ -324,6 +325,7 @@ def show_result(
         title_prefix="Original",
         show=show,
         save_path="original.png",
+        figsize=figsize,
     )
     if show:
         su.visualize.show_single_audio(
@@ -347,6 +349,7 @@ def show_result(
         title_prefix="Generated",
         show=show,
         save_path="generated.png",
+        figsize=figsize,
     )
     if show:
         su.visualize.show_single_audio(
@@ -373,8 +376,19 @@ def show_audio(y, sr, ax=None, title="", wave=False):
     ax.set_title(title)
 
 
-def show_real_and_generated_audio(y_true, y_gen, sr, title="", show=True, T=None, F0=None, suffix="random R and H", xlabel=None):
-    fig, axes = plt.subplots(2, 1, figsize=(14, 6))
+def show_real_and_generated_audio(
+        y_true,
+        y_gen,
+        sr,
+        title="",
+        show=True,
+        T=None,
+        F0=None,
+        suffix="random R and H",
+        xlabel=None,
+        figsize=(14, 6),
+    ):
+    fig, axes = plt.subplots(2, 1, figsize=figsize)
     show_audio(y_true, sr, ax=axes[0], title="Real")
     ax = axes[1]
     show_audio(y_gen, sr, ax=ax, title=f"Generated with {suffix}")
